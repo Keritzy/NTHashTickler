@@ -8,4 +8,4 @@ Windows stores NT (or NTLM) hashes as the MD4 hash of the UTF16/Unicode little e
 There are plenty of other tools out there that already do this, and much better. I wrote this tool for myself as a learning
 experience to exercise performance and multi threaded concepts in C#.
 
-![Screenshot](./screen1.PNG)
+![Screenshot](./screen1.png)
