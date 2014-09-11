@@ -31,7 +31,8 @@ namespace NTHashTickler
         static short maxPasswordLength = 12;
         static string inputHashString = string.Empty;
         static byte[] inputHashBytes = new byte[16];
-        private static readonly ThreadLocal<CryptoRNG> threadLocalRNG = new ThreadLocal<CryptoRNG>(() => new CryptoRNG());        
+        private static readonly ThreadLocal<CryptoRNG> cryptoRNG = new ThreadLocal<CryptoRNG>(() => new CryptoRNG());        
+        //private static CryptoRNG cryptoRNG = new CryptoRNG();
 
         static void Main(string[] args)
         {
@@ -89,14 +90,14 @@ namespace NTHashTickler
             Parallel.For(0, Environment.ProcessorCount, cpu =>
                 {
                     ulong threadLocalHashesGenerated = 0;
-                    
+
+                    byte[] dataOut = new byte[16];
                     while (true)
                     {
                         if (shouldStop > 0)
                             break;
                         
-                        byte[] dataIn = Encoding.Unicode.GetBytes(GetRandomString(threadLocalRNG.Value.Next(1, maxPasswordLength + 1)));
-                        byte[] dataOut = new byte[16];
+                        byte[] dataIn = GetRandomBytesAsUnicode(cryptoRNG.Value.Next(1, maxPasswordLength + 1));
                         IntPtr phHash = IntPtr.Zero;
                         NativeMethods.BCryptCreateHash(phAlgorithmProvider, out phHash, IntPtr.Zero, 0, IntPtr.Zero, 0, 0);
                         NativeMethods.BCryptHashData(phHash, dataIn, dataIn.Length, 0);
@@ -116,7 +117,7 @@ namespace NTHashTickler
                     lock (lockObject)
                     {
                         hashesGenerated += threadLocalHashesGenerated;
-                        Console.WriteLine("CPU {0}: {1} hashes generated ({2} hashes/second.)", cpu, threadLocalHashesGenerated, Math.Round((threadLocalHashesGenerated / stopWatch.Elapsed.TotalSeconds), 0));
+                        Console.WriteLine("CPU {0}: {1} hashes generated ({2} hashes/second.)", cpu, threadLocalHashesGenerated, Math.Round((threadLocalHashesGenerated / stopWatch.Elapsed.TotalSeconds), 1));
                     }
                 });
 
@@ -124,15 +125,14 @@ namespace NTHashTickler
 
             if (phAlgorithmProvider != IntPtr.Zero)
                 NativeMethods.BCryptCloseAlgorithmProvider(phAlgorithmProvider, 0);
-
-            threadLocalRNG.Dispose();
+            
+            cryptoRNG.Dispose();
 
             stopWatch.Stop();
-            Console.WriteLine(hashesGenerated + " hashes generated in {0} seconds.", Math.Round(stopWatch.Elapsed.TotalSeconds, 2));
-            Console.WriteLine("{0} hashes/second.", Math.Round((hashesGenerated / stopWatch.Elapsed.TotalSeconds), 0));
+            Console.WriteLine("{0} hashes generated in {1} seconds ({2} hashes/second.)", hashesGenerated, Math.Round(stopWatch.Elapsed.TotalSeconds, 2), Math.Round((hashesGenerated / stopWatch.Elapsed.TotalSeconds), 1));            
         }
 
-        public static byte[] StringToByteArray(string hex)
+        private static byte[] StringToByteArray(string hex)
         {
             byte[] output = new byte[hex.Length / 2];
             for (int index = 0; index < output.Length; index++)
@@ -143,13 +143,16 @@ namespace NTHashTickler
             return output;
         }
 
-        static string GetRandomString(int size)
-        {
-            StringBuilder sb = new StringBuilder();
+        static byte[] GetRandomBytesAsUnicode(int size)
+        {            
+            List<byte> output = new List<byte>();
             for (int x = 0; x < size; x++)
-                sb.Append((char)validChars[threadLocalRNG.Value.Next(0, validChars.Length)]);
-            
-            return sb.ToString();
+            {
+                output.Add(validChars[cryptoRNG.Value.Next(0, validChars.Length)]);
+                output.Add(0x00);
+            }
+
+            return output.ToArray();
         }
 
         static string HelpText()
